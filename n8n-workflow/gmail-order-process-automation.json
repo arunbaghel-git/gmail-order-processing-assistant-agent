@@ -1,0 +1,1237 @@
+{
+  "name": "gmail-automatiom",
+  "nodes": [
+    {
+      "parameters": {
+        "jsCode": "const products = $node[\"Parse AI JSON\"].json[\"order_state\"].products;\nconst productDetails = $items(\"Get products\").map(item => item.json);\n\nconst result = products.filter(product => !product.customized_product_name)  // Exclude customized products\n  .map(product => {\n\n  if (!product.product_name) {\n    return {\n      ...product,\n      error: \"Product name is missing\"\n    };\n  }\n\n  const matchedProduct = productDetails.find(p =>\n    p.name && p.name.toLowerCase() === product.product_name.toLowerCase() // Ensure p.name is defined\n  );\n\n  if (!matchedProduct) {\n    return {\n      ...product,\n      error: \"Product not found\"\n    };\n  }\n\n  if (!product.color) {\n    return {\n      ...product,\n      error: \"Product color is missing\"\n    };\n  }\n\n  const variation = matchedProduct.variations.find(v =>\n    v.name && v.name.toLowerCase().includes(product.color.toLowerCase()) // Ensure v.name is defined\n  );\n\n  if (!variation) {\n    return {\n      ...product,\n      error: \"Variation not found\"\n    };\n  }\n\n  // Create metadata for main products\n  let metadata = `Color: ${product.color} | ${product.size}: ${product.quantity}`;\n\n  const item_price = parseFloat((Number(variation.price) * Number(product.quantity)).toFixed(2));   \n  \n  return {\n    sku: matchedProduct.sku || \"\",\n    line_id: variation.id,\n    product_name: product.product_name,\n    qty: Number(product.quantity),\n    item_price: item_price,\n    original_unit_price: Number(variation.price),\n    order_item_metadata: metadata // Using the metadata string here\n  };\n\n});\n\nreturn {\n  json: {\n    products: result\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1184,
+        512
+      ],
+      "id": "2b5952bc-d34c-405c-a22e-29abb012672e",
+      "name": "Match Product Data & store"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "7c4faa67-3d4d-4245-ba1d-2b215804e0aa",
+              "leftValue": "={{$json.confirmed === true \n\n $node[\"Parse AI JSON\"].json._id !== undefined}}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        -1696,
+        464
+      ],
+      "id": "ff4d2396-5979-4ec4-9c4b-0b56c03d745f",
+      "name": "if confirm ?1"
+    },
+    {
+      "parameters": {
+        "operation": "upload",
+        "path": "=/public_html/orders/{{ $node[\"Parse AI JSON\"].json.order_state.order_id }}.json",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.ftp",
+      "typeVersion": 1,
+      "position": [
+        -464,
+        400
+      ],
+      "id": "53ba099d-2cca-4ec0-a55e-547efa18bf26",
+      "name": "FTP1"
+    },
+    {
+      "parameters": {
+        "resource": "table",
+        "operation": "create",
+        "tableName": "attachements_data",
+        "columns": {
+          "column": [
+            {
+              "name": "new_urls"
+            },
+            {
+              "name": "threadId"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        -1472,
+        1216
+      ],
+      "id": "dee3d1df-d03b-4633-90f9-23e79a20e044",
+      "name": "Create a data table"
+    },
+    {
+      "parameters": {
+        "jsCode": "const products = $node[\"Parse AI JSON\"].json[\"order_state\"].products;\nlet productList = \"\";\n\nif (products.length > 0) {\n  products.forEach(product => {\n    // Build the product list with only the required fields\n    productList += `<li>\n      <strong>Product Name:</strong> ${product.product_name}<br>\n      <strong>Color:</strong> ${product.color}<br>\n      <strong>Size:</strong> ${product.size}<br>\n      <strong>Quantity:</strong> ${product.quantity}<br>\n    </li>`;\n  });\n} else {\n  productList = \"No products found.\";\n}\n\nreturn {\n  json: {\n    product_list_html: productList\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -352,
+        544
+      ],
+      "id": "8f3d564b-fe2e-440a-a535-dbbc42473d7d",
+      "name": "format products"
+    },
+    {
+      "parameters": {
+        "jsCode": "const products = $json[\"order_state\"][\"products\"];\nconst urls = products.map(product => `https://html.yoursite.com/eww/get-product-details.php?product_name_query=${encodeURIComponent(product.product_name)}`);\nreturn { json: { productUrls: urls } };"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1408,
+        288
+      ],
+      "id": "bb7e4c26-1873-408d-8ab9-c38fcac9649f",
+      "name": "Generate urls"
+    },
+    {
+      "parameters": {
+        "jsCode": "const productUrls = $json[\"productUrls\"];\nconst requests = productUrls.map(url => {\n  return {\n    json: {\n      url: url\n    }\n  };\n});\n\nreturn requests;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1280,
+        288
+      ],
+      "id": "16b42e02-20f6-45ea-94b7-79727d4256b9",
+      "name": "Saperate urls"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Get products from the previous node\nconst products = $node[\"Match Product Data & store\"].json.products;\n\nlet orderSubtotal = 0;\nconst taxRate = 0.20;  // Assuming 20% tax\nconst shippingCost = 7.5;\n\nfor (let i = 0; i < products.length; i++) {\n  const itemPrice = Number(products[i].item_price) || 0;  // Use the item price from the products data\n  \n  // Add the product's total price (item_price) to the order subtotal\n  orderSubtotal += itemPrice;\n}\n\n// Tax Calculation: 20% tax\nconst orderTax = orderSubtotal * taxRate;\n\n// Total Calculation: Add tax and shipping cost\nconst orderTotal = orderSubtotal + orderTax + shippingCost;\n\nreturn {\n  json: {\n    order_subtotal:parseFloat( orderSubtotal.toFixed(2)),  // Round to 2 decimal places\n    order_tax: parseFloat(orderTax.toFixed(2)),  // Round to 2 decimal places\n    order_total: parseFloat(orderTotal.toFixed(2)),  // Round to 2 decimal places\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1024,
+        512
+      ],
+      "id": "e9652504-d461-4f6f-9d09-5f45c2ca0d22",
+      "name": "Calculate totals"
+    },
+    {
+      "parameters": {
+        "jsCode": "const shippingAddress = $node[\"Parse AI JSON\"].json.shipping_address || {};\nconst billingAddress = $node[\"Parse AI JSON\"].json.billing_address || {};\nconst fullName = $node[\"Store Conversation\"].json.conversation || \"\";\n\n// NAME PARSER (If needed)\nfunction parseName(text) {\n  const match = text.match(/From:\\s*(.*?)</);\n  if (!match) return { first: \"\", last: \"\" };\n\n  const name = match[1].trim().split(\" \");\n  return {\n    first: name[0] || \"\",\n    last: name.length > 1 ? name.slice(1).join(\" \") : \"\"\n  };\n}\n\nconst name = parseName(fullName);\n\n// Directly extract address fields from the billing and shipping address objects\nconst extractAddressFields = (address) => {\n  return {\n    street: address.street || \"\",\n    city: address.city || \"\",\n    state: address.state || \"\",\n    postcode: address.postcode || \"\",\n    country: address.country || \"\",\n    phone:address.phone || \"\",\n  };\n};\n\n// Extracted fields\nconst billingFields = extractAddressFields(billingAddress);\nconst shippingFields = extractAddressFields(shippingAddress);\n\n// Returning the formatted JSON with direct extraction from address objects\nreturn [\n  {\n    json: {\n      billing_first_name: name.first,\n      billing_last_name: name.last,\n      billing_address: billingFields.street,\n      billing_city: billingFields.city,\n      billing_state: billingFields.state,\n      billing_postcode: billingFields.postcode,\n      billing_country: billingFields.country,\n      billing_phone:billingFields.phone,\n      \n      shipping_first_name: name.first,\n      shipping_last_name: name.last,\n      shipping_address: shippingFields.street,\n      shipping_city: shippingFields.city,\n      shipping_state: shippingFields.state,\n      shipping_postcode: shippingFields.postcode,\n      shipping_country: shippingFields.country,\n      shipping_phone: shippingFields.phone,\n    }\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -864,
+        512
+      ],
+      "id": "57b15f43-1add-438d-9e11-43ea5ecbd15c",
+      "name": "Format address details"
+    },
+    {
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "={\n  \"order_id\": {{$node[\"Parse AI JSON\"].json.order_state.order_id}},\n  \"order_number\": \"{{Date.now()}}\",\n  \"order_status\": \"processing\",\n  \"order_date\": \"{{new Date().toISOString().slice(0, 10)}}\",\n  \"completed_date\": null, \n  \"paid_date\": null,  \n  \"customer_ip_address\": \"\",\n  \"customer_user\": null,  \n  \"user_email\": \"{{$node[\"Gmail Trigger\"].json.headers.from.match(/<(.+?)>/)?.[1]}}\",  \n  \"transaction_id\": \"\", \n  \"customer_note\": \"\",  \n  \"billing_first_name\":  \"{{ $node['Format address details'].json.billing_first_name}}\",  \n  \"billing_last_name\": \"{{ $node['Format address details'].json.billing_last_name}}\", \n  \"billing_company\": \"\",  \n  \"billing_address\": \"{{$node['Format address details'].json.billing_address}}\" \n  \"billing_city\":\"{{$node['Format address details'].json.billing_city}}\" \n  \"billing_state\":\"{{$node['Format address details'].json.billing_state}}\" \n  \"billing_postcode\": \"{{$node['Format address details'].json.billing_postcode}}\"   \n  \"billing_country\":  \"{{$node['Format address details'].json.billing_country}}\"   \n  \"billing_email\": \"{{$node[\"Gmail Trigger\"].json.headers.from.match(/<(.+?)>/)?.[1]}}\",  \n  \"billing_phone\":\"{{$node['Format address details'].json.billing_phone}}\"  \n  \"shipping_first_name\":  \"{{ $node['Format address details'].json.shipping_first_name}}\",\n  \"shipping_last_name\":\"{{ $node['Format address details'].json.shipping_last_name}}\",\n  \"shipping_address\": \"{{$node['Format address details'].json.shipping_address}}\"\n  \"shipping_city\":\"{{$node['Format address details'].json.shipping_city}}\" \n\"shipping_state\": \"{{$node['Format address details'].json.shipping_state}}\"\n  \"shipping_postcode\": \"{{$node['Format address details'].json.shipping_postcode}}\"\n  \"shipping_country\": \"{{$node['Format address details'].json.shipping_country}}\"\n  \"shipping_company\": \"\",  \n  \"shipping_phone\":\"{{$node['Format address details'].json.shipping_phone}}\"  \n  \"payment_method_title\": \"\",  \n  \"cart_discount\": \"0\",  \n  \"shipping_method_title\": \"Standard Shipping\",\n   \"order_shipping\": \"\",\n  \"order_refund\": [],\n  \"order_total\": \"{{$node[\"Calculate totals\"].json.order_total}}\",  \n  \"order_total_tax\": \"{{$node[\"Calculate totals\"].json.order_tax}}\", \n \"order_subtotal\": {{$node[\"Calculate totals\"].json.order_subtotal}}, \n  \"products\": {{ $node[\"Match Product Data & store\"].json.products }},\n  \"orderfee\": [],  \n  \"coupons\": [],  \n  \"po_number\": \"\", \n  \"industry\": \"\"  \n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -704,
+        512
+      ],
+      "id": "1ae8d10b-1301-4d5a-9225-41eda69680e7",
+      "name": "Set Fields",
+      "alwaysOutputData": false
+    },
+    {
+      "parameters": {
+        "operation": "reply",
+        "messageId": "={{$node[\"Gmail Trigger\"].json.id}}",
+        "message": "=<p>\nDear {{ $node[\"Gmail Trigger\"].json.from.text.match(/^\"?([^\"<]+)\"?\\s*</)?.[1] }},<br><br>\n\nThank you as per your confirmation for the order.<br><br>\nYour Order ID: <strong>{{ $node[\"Set Fields\"].json.order_id }}</strong><br><br>\n<strong>Shipping Address:</strong><br>\nAddress:{{ $node[\"Set Fields\"].json.shipping_address }}<br>\nCity:{{ $node[\"Set Fields\"].json.shipping_city }}<br>\nState:{{ $node[\"Set Fields\"].json.shipping_state }}<br> \nCountry:{{ $node[\"Set Fields\"].json.shipping_country }}<br>\nPostCode:{{ $node[\"Set Fields\"].json.shipping_postcode }}<br>\nPhone: {{ $node[\"Set Fields\"].json.shipping_phone }}<br><br>\n\n<strong>Billing Address:</strong><br>\nAddress:{{ $node[\"Set Fields\"].json.billing_address }}<br>\nCity:{{ $node[\"Set Fields\"].json.billing_city }},<br> \nState:{{ $node[\"Set Fields\"].json.billing_state }}<br>\nCountry:{{ $node[\"Set Fields\"].json.billing_country }}<br>\nPostCode:{{ $node[\"Set Fields\"].json.billing_postcode }}<br>\nPhone: {{ $node[\"Set Fields\"].json.billing_phone }}<br><br>\n\n<strong>Order Details:</strong><br>\n{{ $node[\"format products\"].json.product_list_html }}<br><br>\n\nTotal Amount: <strong>{{ $node[\"Calculate totals\"].json.order_total }}</strong><br><br>\n\nLet us know if you need any changes.\n</p>\n\n<p><br>Best regards,<br>\n<strong> arun</strong><br>\nFounder : xyz<br>\n<a href=\"tel:+91999999999\">+91 999999999</a><br>\n<a href=\"https://www.xyz.com\">www.progryss.com</a>\n</p>",
+        "options": {
+          "ccList": "={{ $json.reply_to }}"
+        }
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        -208,
+        544
+      ],
+      "id": "163b76fb-3110-4dfa-93b8-10515cbebf37",
+      "name": "Order confirm",
+      "webhookId": "a41b3224-f6db-492b-9aae-780dc2226416"
+    },
+    {
+      "parameters": {
+        "operation": "reply",
+        "messageId": "={{$node[\"Gmail Trigger\"].json.id}}",
+        "message": "={{ $node[\"Parse AI JSON\"].json.reply_html }}",
+        "options": {
+          "ccList": "={{ $json.reply_to }}"
+        }
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        -1472,
+        496
+      ],
+      "id": "e9260f15-b54e-43f2-b2a5-c8a853133902",
+      "name": "Ask Missing & confirm",
+      "webhookId": "5d987ad6-dfdc-41ad-975d-8c158b94ceae"
+    },
+    {
+      "parameters": {
+        "operation": "toJson",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.convertToFile",
+      "typeVersion": 1.1,
+      "position": [
+        -576,
+        512
+      ],
+      "id": "ff3535a7-3779-4ea3-8ccb-a1a885f2be73",
+      "name": "Convert to file"
+    },
+    {
+      "parameters": {
+        "url": "={{ $json[\"url\"] }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        -1136,
+        288
+      ],
+      "id": "90b0826c-25ac-4a8c-a77d-50bc961d11b1",
+      "name": "Get products"
+    },
+    {
+      "parameters": {
+        "pollTimes": {
+          "item": [
+            {
+              "mode": "everyMinute"
+            }
+          ]
+        },
+        "simple": false,
+        "filters": {
+          "includeSpamTrash": false,
+          "includeDrafts": false,
+          "q": "category:primary is:unread subject:order"
+        },
+        "options": {
+          "downloadAttachments": true
+        }
+      },
+      "type": "n8n-nodes-base.gmailTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        -4112,
+        432
+      ],
+      "id": "2b214318-ca69-412c-95b6-3ff6c94d9eba",
+      "name": "Gmail Trigger",
+      "executeOnce": false
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "gpt-4o-mini",
+          "mode": "list",
+          "cachedResultName": "GPT-4O-MINI"
+        },
+        "responses": {
+          "values": [
+            {
+              "role": "system",
+              "content": "=You are a customer support assistant for product order processing.\n\nYou only have access to the product catalog provided below. Do not use any product outside of Product catalog:\n\nProduct Name: Essential Workwear Unisex T-Shirt\nSKU: EWW100U\nAvailable Colors: [Black, Charcoal, Navy]\nAvailable Sizes: [Small, Medium, Large, X-Large, 2X-Large, 3X-Large, 4X-Large, 5X-Large]\nAvailable Customization Type: [Embroidery, Printed]\n\nProduct Name: Printer Prime T-Shirt\nSKU: PP2264030\nAvailable Colors: [Black, Anthracite, Orange, Red, Navy, Cobalt]\nAvailable Sizes: [Small, Medium, Large, X-Large, 2X-Large, 3X-Large, 4X-Large, 5X-Large]\nAvailable Customization Type: [Embroidery, Printed]\n\nProduct Name: Printer Prime Crewneck Sweatshirt\nSKU: PP2262071\nAvailable Colors: [Black, Anthracite, Orange, Red, Navy, Cobalt]\nAvailable Sizes: [X-Small, Small, Medium, Large, X-Large, 2X-Large, 3X-Large, 4X-Large]\nAvailable Customization Types: [Embroidery, Printed]\n\nProduct Name: Essential Workwear Kapton Hi-Vis Vest\nSKU: HV-325\nAvailable Colors: [Orange, Yellow]\nAvailable Sizes: [Small, Medium, Large, X-Large, 2X-Large, 3X-Large, 4X-Large, 5X-Large]\nAvailable Customization Type: [Embroidery, Printed]\n\nProduct Name: Essential Workwear Fleece\nSKU: EWW410U\nAvailable Colors: [Black, Dark Navy, Seal Grey]\nAvailable Sizes: [Small, Medium, Large, X-Large, 2X-Large, 3X-Large]\nAvailable Customization Type: [Embroidery, Printed]\n\nProduct Name: Printer Prime Padded Softshell Jacket\nSKU: PP2261071\nAvailable Colors: [Black, Anthracite Grey, Orange, Red, Navy, Cobalt]\nAvailable Sizes: [Small, Medium, Large, X-Large, 2X-Large, 3X-Large, 4X-Large]\nAvailable Customization Types: [Embroidery, Printed]\n\nProduct Name: Printer Prime Polo Shirt - Ladies\nSKU: PP2265025\nAvailable Colors: [Black, Anthracite Grey, Orange, Red, Navy, Cobalt]\nAvailable Sizes: [XS, Small, Medium, Large, X-Large, 2X-Large]\nAvailable Customization Type: [Embroidery, Printed]\n\nProduct Name: Essential Workwear Padded Gilet\nSKU: EWW450U\nAvailable Colors: [Black, Grey, Navy Blue]\nAvailable Sizes: [Small, Medium, Large, X-Large, 2X-Large, 3X-Large]\nAvailable Customization Type: [Embroidery, Printed]\n\nProduct Name: Essential Workwear Premium Polo Shirt\nSKU: EWW200U\nAvailable Colors: [Ash, Black, Bottle Green, Charcoal, Navy]\nAvailable Sizes: [Small, Medium, Large, X-Large, 2X-Large, 3X-Large]\nAvailable Customization Type: [Embroidery,Printed]\n\nProduct Name: Essential Workwear Premium Hoodie\nSKU: EWW304U\nAvailable Colors: [Black, Navy, Charcoal]\nAvailable Sizes: [Small, Medium, Large, X-Large, 2X-Large, 3X-Large, 4X-Large, 5X-Large]\nAvailable Customization Types: [Embroidery, Printed]\n\n----------------------------------------------------\n\nYour job is to:\n1. Understand the full conversation\n2. Update the order_state only when the customer explicitly changes something\n3. Write the next customer email in clean HTML\n\n--------------------------------------------------\nCORE RULES\n--------------------------------------------------\n\n- Respond only to the latest customer message.\n- Use the previous order_state as the source of truth.\n- Update order_state based only on the latest customer message.\n- Never reset or recreate order_state from scratch if previous order_state is provided.\n- Preserve existing product entries unless the customer explicitly changes or removes them.\n- Preserve existing customization entries unless the customer explicitly changes or removes them.\n- Preserve the existing shipping and billing address entries unless the customer explicitly updates or removes them.\n- reply_html is mandatory and must never be empty.\n\n--------------------------------------------------\nREQUIRED PRODUCT FIELDS\n--------------------------------------------------\n\nEach product entry needs:\n- product_name\n- color\n- size\n- quantity\n\nIf any of these is missing or unavailable, keep that field empty and ask only for that field.\n\n--------------------------------------------------\nCATALOG RULES\n--------------------------------------------------\n\n- The product catalog is the only source of truth for product_name, color, size and customization_type.\n- Only use product names that exist in the product catalog.\n- Only use color that exactly exist for the selected Product Name Available Colors list.\n- Only use sizes that exactly exist for the selected Product Name Available Sizes list.\n- Only use customization type that exactly exist for the selected Product Name Customization Type list.\n- Never invent, guess, convert, replace, or loosely normalize unavailable values.\n- Never accept a value from user which is not available in product catelog.\n\n--------------------------------------------------\nPRODUCT SEARCH RULES\n--------------------------------------------------\n\n1. If the customer gives an exact product name matches in the Product Catalog:\nIf the exact product name is available:\n- Use that exact product name.\nIf the exact product name is unavailable in product catelog:\nDo not select the product name and inform the customer that the requested product is not available.\nSuggest 2–3 closest relevant alternatives from the Product catalog (including available colors and available sizes).\n\n2. If the customer gives a partial product name match in the Product Catalog:\n - If there is one strong, clear closest match, do not auto-select the product name if the requested color or size is missing for selected product name. Inform the customer that the requested color or size is not available and ask if they would like to proceed with the closest match.\n - If there are multiple relevant matches, show the matching full product names and ask the customer to choose.\n - Show available colors and available sizes for the matching product names.\n\n3. If the customer gives a broad keyword such as t-shirt, tee, sweatshirt, jacket, polo, fleece, vest, gilet, hoodie, or shirt:\n - Recommend relevant full product names from the product catalog.\n - Show available colors and available sizes for each product.\n - Ask the customer to choose one or more products.\n\n4. If no relevant product match is found in the Product Catalog:\n - Clearly state that no matching product was found.\n - Suggest 2–3 closest relevant alternatives from the catalog, including available colors and sizes.\n- Ask the customer: Inquire if they'd like to proceed with one of the suggested alternatives or choose something else.\n\n--------------------------------------------------\nCOLOR RULES\n--------------------------------------------------\n\n1. Always validate color against the selected product Available Color list.\n2. Only use the color options from the selected product, and avoid selecting any color based on the closest match from other product names. \n3. Never validate or select colors based on the closest match from other products or the entire product catalog. Each product color should be validated independently against its own Available Colors list.\n4. If customer requested color does not exist in the selected product Available Color list:\n  - do not store it\n  - leave color as empty for that product\n  - tell the customer that the color is not available\n  - show the exact available colors for that product\n  - ask the customer to choose a color from available colors for that product\n\n5. Never replace one color with another.\n6. Never convert \"Blue\" to \"Navy\", \"Green\" to \"Cobalt\", or any other color variation.\n7. Never select the closest available color for a product if the requested color is not available in selected product colors list.\n8. Accept colors from the user in any letter case, including lowercase, uppercase, or mixed case, and match them with the catalog colors in a case-insensitive manner.\n\n--------------------------------------------------\nSIZE RULES\n--------------------------------------------------\n\n1. Always validate size against the selected product Available Sizes list.\n2. Only use the size options from the selected product, and avoid selecting any size based on the closest match from other product names.\n3. Never validate or select sizes based on the closest match from other products or the entire product catalog. Each product size should be validated independently against its own Available Sizes list.\n4. If customer requested size does not exist in the selected product size list:\n  - do not store it\n  - leave size as empty for that product\n  - tell the customer that the size is not available\n  - show the exact available sizes for that product\n  - ask the customer to choose a size from available sizes for that product\n\n5. Never replace a size with a different size.\n6. Do not convert \"5X-Large\" to \"4X-Large\" or \"6X-Large\" to \"5X-Large\", or any other size variations.\n7. Never select the closest available size for a product if the requested size is not available in selected product Available Sizes list.\n8. Accept sizes from the user in any letter case, including lowercase, uppercase, or mixed case, and match them with the selected product Available Sizes in a case-insensitive manner.\n\n--------------------------------------------------\nQUANTITY RULES\n--------------------------------------------------\n\n1. Quantity must be explicitly provided by the customer.\n2. Words like \"piece\", \"pieces\", \"qty\", \"quantity\", \"pcs\", and \"units\" should be treated as quantity\n3. Never assume or default quantity to 1.\n4. If quantity is missing, leave it as an empty and prompt the customer to provide it.\n\n--------------------------------------------------\nPRODUCT ENTRY RULES\n--------------------------------------------------\n\n- If the customer is clearly adding a separate product combination, create a new product entry.\n- If the customer is clearly correcting or updating an existing incomplete product entry, update that product entry.\n- Do not merge separate product entries unless the customer clearly combines them.\n- If the same product appears more than once in the order, do not guess which one to update unless the customer clearly identifies it by size, color, quantity, or full combination.\n- If the target product entry is not clear, ask a short clarification question instead of guessing.\n\n--------------------------------------------------\nMULTIPLE COMBINATIONS RULE\n--------------------------------------------------\n\n- If the customer gives multiple product combinations in one message, keep each combination as a separate product entry.\n- Do not merge separate combinations into one product entry.\n- If one field in a combination is unavailable, keep the other fields from that same combination.\n- If the customer adds another product with words like \"also\", \"and\", or \"plus\", or gives another quantity/color/size combination, treat it as another product entry.\n\n- When all required product fields are complete for the current products, confirm the products with the customer only once.\n\n--------------------------------------------------\nREQUIRED CUSTOMIZATION FIELDS\n--------------------------------------------------\n\nEach customization entry needs:\n\n- customization_type\n- logo_type\n- logo_location\n- logo_text\n- logo_images\n\nIf any of these is missing or unavailable, keep that field empty and ask only for that field.\n\n--------------------------------------------------\nCUSTOMIZATION HANDLING\n--------------------------------------------------\n\nAfter product confirmation, ask once:\n- If one product entry exists:\n  \"Would you like customization on this product?\"\n- If multiple product entries exist:\n  \"Would you like customization on these products?\"\n\nIf customer declines customization:\n- set customize = false\n- do not ask customization again for that product/order, must move to address handling in the same reply by asking for shipping_address and billing_address using the required address format\n\nIf customer agrees to customization:\n- set customize = true\n- start customization flow\n   \n--------------------------------------------------\n\nIf the user agrees to customization, collect the following fields together and always provide the available options for selection:\n\n- Customization Type : Embroidery / Printed\n- Logo Type : New / Existing\n- Logo Location : Left Breast, Right Breast, Left Sleeve, Right Sleeve, Nape, Back Shoulders\n- Logo Text\n- Logo Image only if logo_type = New and logo_images is missing.\n\nRequired only when logo_type = New:\n- logo_images\n\nIf any required field is missing, ask only for missing fields.\nDo not ask for field that are already provided.\n--------------------------------------------------\nCUSTOMIZATION TYPE RULES\n--------------------------------------------------\n\n1. Always validate customization_type against the selected product Available Customization Type list.\n2. Only use the customization_type options from the selected product, and avoid selecting any customization_type based on the closest match from other product names. \n3. Never validate or select customization_type based on the closest match from other products or the entire product catalog. Each product customization_type should be validated independently against its own Available Customization Type list.\n4. If customer requested customization_type does not exist in the selected product Available Customization Type list(even if user insists):\n  - do not store it\n  - leave customization_type as empty for that product\n  - tell the customer that the customization_type is not available\n  - Must show the exact available customization_type for that product\n  - ask the customer to choose a customization_type from available Customization Type List for that product.\n5. Never replace one customization_type with another.\n6. Never convert \"Embroidery\" to \"Printed\", \"Printed\" to \"Embroidery\", or any other Customization Type variation.\n7. Never auto-select a closest customization_type.\n8. Accept customization_type from the user even if they are in lowercase, and match them with the catalog colors in a case-insensitive manner.\n9. Never accept vague or incorrect terms:\n   Example: Do not accept \"Print\", \"Printing\", \"Stitch\", \"Learned\", \"Learning\",\"flex\" or any other term unless it directly matches \"Printed\" or \"Embroidery\".\n\n--------------------------------------------------\nLOGO TYPE RULES\n--------------------------------------------------\n\n1. If a new customization entry explicitly says logo_type = Existing/existing:\n- logo_images must be empty for that entry\n- do not ask the customer to confirm, reuse, or provide any logo image for that entry\n- do not use image_urls for that entry\n- do not use any logo image from a previous customization entry\n\n2. If logo_type = New:\n- logo image is required\n- use image_urls as the only source for customer-provided logo URLs\n- ask for the logo only if logo_images is missing and no usable image URL exists in image_urls\n- if the customer sends a logo URL or attachment, store it in logo_images for that customization entry\n- do not ask for logo again if logo_images is already provided for that customization entry\n\n3. If logo_type = New and logo_images is missing, and exactly one customization entry needs logo_images, and exactly one image URL is available in image_urls:\n- attach that image URL to logo_images for that customization entry\n- do not ask again which product it belongs to\n- do not ask again for logo image\n\n4. If logo_type = New and logo_images is missing, and exactly one customization entry needs logo_images, but more than one image URL is available in image_urls:\n- do not attach all images\n- ask the customer which one image should be used for that customization entry\n\n5. If multiple customization entries or multiple products exist and one or more image URLs are available:\n- never assume which image belongs to which product or customization\n- ask the customer to confirm which image belongs to which customization entry\n\n6. If a new customization entry does not explicitly mention logo_type or logo image:\n- do not assume the same logo_type or logo_images from a previous customization entry\n\nImportant:\n- Never set logo_images before logo_type = New is confirmed.\n- Never set logo_images when logo_type = Existing.\n- Never attach all image_urls to one customization entry.\n- Never copy logo_images from previous customization entries unless customer clearly says \"use same logo\".\n\n--------------------------------------------------\nNEW CUSTOMIZATION ENTRY RULE\n--------------------------------------------------\n\nIf customer says:\n- add more customization\n- another customization\n- customize another product\n- add customization to existing product\n\nTreat it as a new customization entry unless customer clearly says they are updating an existing customization.\n\nEvery new customization entry must start blank except fields explicitly provided by customer.\n\nNever inherit from previous customization entry:\n\n- customization_type\n- logo_type\n- logo_location\n- logo_text\n- logo_images\n- product name\n- color\n- size\n\nNever assume logo_type = New because previous customization used New.\n\n--------------------------------------------------\nMULTIPLE CUSTOMIZATION RULE\n--------------------------------------------------\n\nIf customer gives multiple customization entries in one message:\n- create separate customization entries only when product and details are clear\n- do not merge separate customization entries\n- do not mix logo/image/location/text between entries\n- if mapping is unclear, ask customer to confirm which detail belongs to which product/customization\n\nIf customer provides one image but multiple customization entries exist:\n- do not attach image automatically\n- ask which customization entry the image belongs to\n\nIf customer provides multiple images:\n- never attach all images to one entry\n- ask customer to map each image to the correct customization entry\n\n--------------------------------------------------\nCUSTOMIZATION QUESTIONS\n--------------------------------------------------\n\nRules:\n- If logo_type is missing, ask for Logo Type, Logo Position, and Logo Text together.\n- Do not ask for Logo Image until logo_type = New is confirmed.\n- If logo_type = New and logo_images is missing, ask for Logo Image.\n- If logo_type = Existing, never ask for Logo Image.\n- If only one field is missing later, ask only for that one field.\n\nSAME LOGO RULE:\n\nIf logo_type = New and customer clearly says to use the same logo from a previous customization:\n- copy logo_images from that clearly referenced previous customization entry\n- only do this when exactly one previous logo image is available, or the customer clearly identifies which previous logo to use\n- if multiple previous logo images exist and customer only says \"same logo\", ask which logo they want to reuse\n- never reuse previous logo image automatically\n\n--------------------------------------------------\nCUSTOMIZATION COMPLETION RULE\n--------------------------------------------------\n\nCustomization is complete only when:\n- exact product entry is identified\n- customization_type is provided\n- logo_type is provided\n- logo_location is provided\n- logo_text is provided\n- logo_images is provided when logo_type = New\n\nAfter customization is complete:\n- if multiple products exist, ask whether customer wants customization on another product\n- if customer says no, must move to address handling\n- if customer says yes, start a new customization entry from blank\n\n- If all required customization fields are provided and confirmed by the customer, must ask for shipping_address and billing_address if they are not already provided.\n\n--------------------------------------------------\nADDRESS HANDLING\n--------------------------------------------------\n\nRequired fields for shipping_address and billing_address:\n- street\n- city\n- state\n- country\n- postcode\n- phone\n\nADDRESS RULES\n\n- Handle shipping_address and billing_address only after product details are complete and customization is either completed or explicitly declined.\n- If the customer declines customization, immediately ask for shipping_address and billing_address in the same reply.\n- If customization has started, finish customization first before asking for shipping_address or billing_address.\n- Do not start address collection while customization details are still incomplete.\n\n- When asking for shipping_address or billing_address, always ask in this exact format:\n\nShipping Address:\nstreet:\ncity:\nstate:\ncountry:\npostcode:\nphone:\n\nBilling Address:\nstreet:\ncity:\nstate:\ncountry:\npostcode:\nphone:\n\n- If some address fields are already present, show the full format but clearly say the customer only needs to fill the missing fields.\n- Do not ask address fields in sentence form.\n- Do not assume any address field.\n- Do not remove or overwrite existing address fields unless the customer explicitly changes them.\n\n- Copy shipping_address into billing_address only when the customer explicitly says billing address is the same as shipping address.\n- Do not assume shipping_address and billing_address are the same unless the customer explicitly says so.\n\n- If the customer clearly updates shipping_address, update shipping_address only.\n- If the customer clearly updates billing_address, update billing_address only.\n- If it is not clear whether the update is for shipping_address or billing_address, ask a short clarification question instead of guessing.\n\n- Set shipping_confirmed = true only when the customer explicitly confirms the shipping_address.\n- Set billing_confirmed = true only when the customer explicitly confirms the billing_address.\n\n- Do not ask again for shipping confirmation if shipping_confirmed is already true.\n- Do not ask again for billing confirmation if billing_confirmed is already true.\n\n--------------------------------------------------\nCUSTOMIZATION SUMMARY RULES\n--------------------------------------------------\n\nWhen reply_html includes customization summary:\n- show all products currently present in order_state\n- show all customization entries currently present in order_state\n- do not show addresses in the customization summary\n\nUse this customization summary style:\n\nCustomization Type: [Customization type]\nLogo Type: [Logo type]\nLogo Location: [Logo location]\nLogo Text: [Logo text]\nLogo Image: [Logo images]\n\nIf logo_type = Existing, do not show Logo Image.\n\n--------------------------------------------------\nREPLY RULES\n--------------------------------------------------\n\n- Keep the reply short, clear, and usable.\n- Show a clean product summary.\n- If reply_html includes an order summary, always show all product entries currently present in order_state.\n- Ask only for the fields that are actually missing or unavailable for that specific product entry.\n- Ask again only for fields that are missing or unavailable for that specific product entry.\n- Do not ask again for color, size, or quantity if that field is already present and available for that product entry.\n- If customization has started, ask only for missing customization fields and do not return to product-detail questions unless the customer explicitly changes a product.\n- When customization is still in progress, do not ask for address details yet.\n- Do not ask for address details until customization is either completed or explicitly declined.\n- When reply_html includes address summary, show both shipping_address and billing_address clearly.\n- If reply_html includes an order summary, always show all product entries,all customizatoin entries, shipping_address and billing_address clearly currently present in order_state.\n- Do not use words like valid, invalid, correct, or incorrect in the customer-facing reply.\n\nUse this summary style:\n\nProduct: [Product Name]\nColor: [Color]\nSize: [Size]\nQuantity: [Quantity]\n\n--------------------------------------------------\nEMAIL RULES\n--------------------------------------------------\n\n- First email greeting must:\nHi, <br>\nThank you for contacting Essential Workwear.<br>\n\nMy name is Sebastian, your AI Order Assistant. I’m here to help you with product enquiries, quotations, stock availability, sizes, colours, branding options, and placing your order quickly and efficiently.<br>\n- If this is not the first email → skip the above static greeting completely\n- Use only: <p>, <br>, <strong>, <a>\n- Start with a polite greeting\n- Briefly acknowledge the latest customer message\n- Do not include markdown\n- Do not include explanations\n- Always end with this exact signature:\n\n<p><br>Best regards,<br>\n<strong>Sebastian</strong><br>\nAI Order Assistant<br>\nEssential Workwear<br>\n<a href=\"https://essentialworkwear.com/\">\nwww.essentialworkwear.com</a>\n</p>\n--------------------------------------------------\nOUTPUT RULES\n--------------------------------------------------\n\nReturn only valid JSON in exactly this structure:\n\n{\n  \"reply_html\": \"\",\n  \"order_state\": {\n    \"order_id\": \"\",\n    \"products\": [\n      {\n        \"product_name\": \"\",\n        \"color\": \"\",\n        \"size\": \"\",\n        \"quantity\": \"\"\n      }\n    ],\n    \"customizations\": [\n      {\n        \"customization_type\": \"\",\n        \"logo_location\": \"\",\n        \"logo_type\": \"\",\n        \"order_item_metadata\": \"\",\n        \"customized_product_name\": \"\",\n        \"customized_product_color\": \"\",\n        \"customized_product_size\": \"\",\n        \"logo_text\": \"\",\n        \"logo_images\": \"\"\n      }\n    ],\n    \"customize\": false,\n    \"shipping_address\": {\n      \"street\": \"\",\n      \"city\": \"\",\n      \"state\": \"\",\n      \"postcode\": \"\",\n      \"country\": \"\",\n      \"phone\": \"\"\n    },\n    \"billing_address\": {\n      \"street\": \"\",\n      \"city\": \"\",\n      \"state\": \"\",\n      \"postcode\": \"\",\n      \"country\": \"\",\n      \"phone\": \"\"\n    },\n    \"shipping_confirmed\": false,\n    \"billing_confirmed\": false\n  }\n}"
+            },
+            {
+              "content": "=Below is the full email conversation between the customer and support.\n\nConversation history (latest message is at the end):\n{{$node[\"Store Conversation\"].json.conversation}}\n\nLatest user Message\n{{ $('Latest Message').item.json.text }}\n\nImage URLs provided by the user:\n{{JSON.stringify($node[\"Store Conversation\"].json.image_urls)}}\n\nImportant image rule:\nUse image_urls only for customization entries where logo_type = New.\nNever use image_urls when logo_type = Existing.\nIf multiple image URLs are provided and mapping is unclear, ask the customer which image belongs to which customization.\n\nPrevious order state:\n{{JSON.stringify($node[\"Parse Order State\"].json.order_state || {\"order_id\":\"\",\"products\":[],\"customizations\":[],\"customize\":false,\"shipping_address\":{\"street\":\"\",\"city\":\"\",\"state\":\"\",\"postcode\":\"\",\"country\":\"\",\"phone\":\"\"},\"billing_address\":{\"street\":\"\",\"city\":\"\",\"state\":\"\",\"postcode\":\"\",\"country\":\"\",\"phone\":\"\"},\"shipping_confirmed\":false,\"billing_confirmed\":false})}}\n\nProcess only the latest customer message.\nImportant:\n- do not start customization until all required product fields(color, size, quantity) are complete and confirmed for each product entries.\n- if logo_type = New, ask for logo only when logo_images is missing\n- Must ask Customization Type : Embroidery / Printed if customer agree to customize products.\n- Must ask for shipping_address and billing_address in the required address format after all required customization fields are complete and confirmed or declined.\n- If any required field is missing, do not make assumptions, Always ask the customer to provide the missing details explicitly.\n- Keep each product name in bold.\n- End signature is must always keep in reply_html.\n\n---------------------------------------------\nProduct Suggestion format (always use this exact structure):\n\nImportant Rules:\n\n- Always display the FULL product name exactly as stored in the Product Catalog.\n- Never shorten, truncate, abbreviate, or partially match product names in the response.\n- Always ask for customer confirmation before proceeding with a suggested alternative.\n\nReturn JSON only."
+            }
+          ]
+        },
+        "builtInTools": {},
+        "options": {
+          "textFormat": {
+            "textOptions": {
+              "type": "json_object"
+            }
+          }
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 2.1,
+      "position": [
+        -2256,
+        464
+      ],
+      "id": "c8a672da-0891-4f65-ba5d-8586c384fc4e",
+      "name": "Message a model",
+      "alwaysOutputData": false
+    },
+    {
+      "parameters": {
+        "url": "=https://gmail.googleapis.com/gmail/v1/users/me/threads/{{ $('Loop Over Items').item.json.threadId }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "gmailOAuth2",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        -3056,
+        464
+      ],
+      "id": "5d9bbe12-0f0f-46ea-82c9-0f329e516187",
+      "name": "HTTP Request"
+    },
+    {
+      "parameters": {
+        "jsCode": "const parsed = $json.output[0].content[0].text;\n\n// get previous order_id (from earlier node)\nlet previousOrderId = $node[\"Message a model\"]?.output?.order_state?.order_id;\n\n// preserve existing OR fallback\nlet orderId = parsed?.order_state?.order_id || previousOrderId;\n\nif (!orderId) {\n  orderId = 'ORD-' + Date.now();\n}\n\nparsed.order_state = parsed.order_state || {};\nparsed.order_state.order_id = orderId;\n\nreturn [\n  {\n    json: parsed\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1984,
+        464
+      ],
+      "id": "3f8a1631-2b88-4806-87b3-0616c1bec5b2",
+      "name": "Parse AI JSON"
+    },
+    {
+      "parameters": {
+        "jsCode": "const fullThread = $json.fullThread; \n\nconst finalImages = $node[\"parse urls\"].json.attachments || []; \n\nlet thread = fullThread || \"\";\n\nconst messages = thread.split(\"\\n\");\n\n// Filter out any lines starting with \"On [day], [date] at [time] [email] wrote:\" or those that are part of a quoted message (lines that start with '>')\nconst filteredMessages = messages.filter(message => {\n  // Skip lines that start with \"On [day], [date] at [time] [email] wrote:\" or any quoted content starting with '>'\n  return !message.trim().startsWith(\"On\") && !message.trim().startsWith(\">\");\n});\n\n// Rebuild the cleaned thread by joining the remaining messages\nconst cleanedThread = filteredMessages.join(\"\\n\").trim();\nreturn [\n  {\n    json: {\n      conversation: cleanedThread,\n      image_urls: finalImages\n    }\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -2768,
+        464
+      ],
+      "id": "b8f49783-63ef-49c2-becf-8b0d49293817",
+      "name": "Store Conversation"
+    },
+    {
+      "parameters": {
+        "operation": "upload",
+        "path": "=public_html/attachements/{{$json[\"fileName\"]}}",
+        "binaryPropertyName": "=data",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.ftp",
+      "typeVersion": 1,
+      "position": [
+        -3392,
+        256
+      ],
+      "id": "dda3b477-362d-4f8c-91fe-05d40264f973",
+      "name": "FTP2"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "ffe74653-2593-4e9a-886f-25eafd7ba0e0",
+              "leftValue": "={{Object.keys($binary {}).length}}",
+              "rightValue": "=",
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        -3776,
+        448
+      ],
+      "id": "dc0c9e54-66e4-4f91-95ba-74e40a5dc31a",
+      "name": "If"
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "value": "hqkn5ur9YCxefFEn",
+          "mode": "list",
+          "cachedResultName": "attachement_data",
+          "cachedResultUrl": "/projects/9KMkB0RswOyqwwkP/datatables/hqkn5ur9YCxefFEn"
+        },
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "threadId",
+              "keyValue": "={{ $('Loop Over Items').item.json.threadId }}"
+            },
+            {
+              "keyName": "new_urls",
+              "keyValue": "={{$json.new_urls}}"
+            }
+          ]
+        },
+        "returnAll": true
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        -3568,
+        464
+      ],
+      "id": "6a8bebcc-3523-44de-b08a-d8fdd0a4d132",
+      "name": "Get row(s)",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "operation": "upsert",
+        "dataTableId": {
+          "__rl": true,
+          "value": "hqkn5ur9YCxefFEn",
+          "mode": "list",
+          "cachedResultName": "attachement_data",
+          "cachedResultUrl": "/projects/9KMkB0RswOyqwwkP/datatables/hqkn5ur9YCxefFEn"
+        },
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "threadId",
+              "keyValue": "={{ $('Loop Over Items').item.json.threadId }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "threadId": "={{ $('Loop Over Items').item.json.threadId }}",
+            "new_urls": "={{$json.urls}}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "new_urls",
+              "displayName": "new_urls",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "threadId",
+              "displayName": "threadId",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        -3312,
+        464
+      ],
+      "id": "894bc218-f6f8-49cc-9ffa-93ef19e0cf68",
+      "name": "Upsert row(s)"
+    },
+    {
+      "parameters": {
+        "jsCode": "const urlsRaw = $json.new_urls || \"[]\";\n\nlet urls = [];\n\ntry {\n  urls = JSON.parse(urlsRaw);\n} catch (e) {\n  urls = [];\n}\n\nreturn [{\n  json: {\n    threadId: $('Loop Over Items').item.json.threadId,\n    attachments: urls,\n    email_body: $('Loop Over Items').item.json.email_body\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -3184,
+        464
+      ],
+      "id": "fb2bb223-0028-4f7c-bc0e-7c556a25b6eb",
+      "name": "parse urls"
+    },
+    {
+      "parameters": {
+        "jsCode": "let imageUrls = [];\n\nfor (const item of $input.all()) {\n  if (item.json.image_url) {\n    imageUrls.push(item.json.image_url);\n  }\n}\n\nreturn [{\n  json: {\n    threadId: $node[\"Loop Over Items\"].json.threadId,\n    new_urls: imageUrls\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -3136,
+        256
+      ],
+      "id": "d5401995-cf85-422d-9322-59d6154fd000",
+      "name": "store urls in arr"
+    },
+    {
+      "parameters": {
+        "jsCode": "return Object.keys($node[\"Loop Over Items\"].binary).map(key => {\n  return {\n    json: {\n      fileName: $node[\"Loop Over Items\"].binary[key].fileName\n    },\n    binary: {\n      data: $node[\"Loop Over Items\"].binary[key]\n    }\n  };\n});"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -3536,
+        256
+      ],
+      "id": "1467c4de-ff46-4622-a65f-925caf3362ee",
+      "name": "convert in binary"
+    },
+    {
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "={\n  \"attachment_filenames\": {{\n    Object.keys($node[\"Loop Over Items\"].binary).map(\n      key => $node[\"Loop Over Items\"].binary[key].fileName\n    )\n  }}\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -3664,
+        256
+      ],
+      "id": "d3c96255-c381-4db1-a9b1-42dc1a79c80f",
+      "name": "get file name"
+    },
+    {
+      "parameters": {
+        "jsCode": "// 🔹 OLD from DB\nconst prevRaw = $json.new_urls || \"[]\";\n\nlet prev = [];\ntry {\n  prev = JSON.parse(prevRaw);\n} catch (e) {\n  prev = [];\n}\n\n// 🔹 SAFE access to JS4\nlet newUrls = [];\n\ntry {\n  newUrls = $node[\"store urls in arr\"].json.new_urls || [];\n} catch (e) {\n  newUrls = []; // JS4 not executed → fallback\n}\n\n// If no new attachments → keep old\nif (newUrls.length === 0) {\n  return [{\n    json: {\n      threadId:$('Loop Over Items').item.json.threadId,\n      urls: JSON.stringify(prev)\n    }\n  }];\n}\n\n// 🔹 Merge\nconst merged = [\n  ...prev,\n  ...newUrls.filter(u => !prev.includes(u))\n];\n\nreturn [{\n  json: {\n    threadId: $('Loop Over Items').item.json.threadId,\n    urls: JSON.stringify(merged)\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -3440,
+        464
+      ],
+      "id": "7ad0a0cb-9d6a-4c15-969b-46398ed86127",
+      "name": "merge urls"
+    },
+    {
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "={\n  \"image_url\": \"html.yourdomain.com/attachements/{{ $json['fileName'] }}\"\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -3264,
+        256
+      ],
+      "id": "b6c8a724-7745-4569-b8f1-e18dc80bf45b",
+      "name": "generate img url"
+    },
+    {
+      "parameters": {
+        "jsCode": "const messages = $json.messages;  // Get all messages in the thread\nlet fullThread = \"\"; // Initialize empty string to build the cleaned thread\n\n// Loop through all messages in the thread\nmessages.forEach(message => {\n  const payload = message.payload;  // Get payload of each message\n  \n  // Extract the 'From' field from the headers\n  const headers = payload.headers || [];\n  let from = \"\";\n  \n  // Loop through headers to get 'From' and 'Subject'\n  for (const h of headers) {\n    if (h.name === \"From\") from = h.value;\n  }\n\n  // Add 'From' and 'Subject' to the thread\n  fullThread += `${from}\\n`;\n\n  function decodeBase64(data) {\n    return Buffer.from(data, 'base64').toString('utf-8');\n  }\n\n  // Extract and decode the body of each message (plain text)\n  if (payload.parts) {\n    for (const part of payload.parts) {\n      if (part.mimeType === \"text/plain\" && part.body?.data) {\n        fullThread += decodeBase64(part.body.data);\n        break;  // Stop after extracting plain text part\n      }\n    }\n  }\n\n  // Fallback for non-multipart emails (use body data for plain text)\n  if (payload.body?.data) {\n    fullThread += decodeBase64(payload.body.data);\n  }\n});\n\n// Return the cleaned email body (plain text)\nreturn { fullThread };"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -2928,
+        464
+      ],
+      "id": "9e89558b-f8bd-4c38-b558-cfde0fa291d9",
+      "name": "Decode body"
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "value": "30R3H41RQN6wftD6",
+          "mode": "list",
+          "cachedResultName": "order_state_",
+          "cachedResultUrl": "/projects/9KMkB0RswOyqwwkP/datatables/30R3H41RQN6wftD6"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "thread_id",
+              "keyValue": "={{ $('Loop Over Items').item.json.threadId }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        -2544,
+        464
+      ],
+      "id": "023a60d4-2027-44d1-8b4c-bcf47aa25db6",
+      "name": "Get row(s)1",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "let state = {};\n\ntry {\n  state = JSON.parse($json[\"order_state\"] || \"{}\");\n} catch (e) {}\n\nreturn [{\n  json: {\n    order_state: state\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -2400,
+        464
+      ],
+      "id": "e001f097-c7c1-4b35-93fc-34c2f160a4ab",
+      "name": "Parse Order State"
+    },
+    {
+      "parameters": {
+        "operation": "upsert",
+        "dataTableId": {
+          "__rl": true,
+          "value": "30R3H41RQN6wftD6",
+          "mode": "list",
+          "cachedResultName": "order_state_",
+          "cachedResultUrl": "/projects/9KMkB0RswOyqwwkP/datatables/30R3H41RQN6wftD6"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "thread_id",
+              "keyValue": "={{ $('Loop Over Items').item.json.threadId }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "order_state": "={{JSON.stringify($json.order_state)}}",
+            "thread_id": "={{ $('Loop Over Items').item.json.threadId }}",
+            "email": "={{ $('Loop Over Items').item.json.from.value[0].address }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "email",
+              "displayName": "email",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "order_state",
+              "displayName": "order_state",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "thread_id",
+              "displayName": "thread_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        -1840,
+        464
+      ],
+      "id": "40863584-e1a6-4f35-b8b8-6576da26d1ba",
+      "name": "Upsert row(s)1"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        -3936,
+        432
+      ],
+      "id": "4c744e2b-92c7-4a41-9d9e-c99254c00c2b",
+      "name": "Loop Over Items"
+    },
+    {
+      "parameters": {
+        "jsCode": "const emailBody = ($('Loop Over Items').item.json.text || \"\").trim();\n\n// Filter the email body to remove quoted content like \"On Thu, May 7, 2026 at ...\"\nconst filteredMessage = emailBody.split(\"\\n\").filter(line => {\n  return !line.trim().startsWith(\"On\") && !line.trim().startsWith(\">\"); // Skip quoted lines\n}).join(\"\\n\").trim(); // Join the filtered lines back into a single string\n\nreturn [\n  {\n    json: {\n      text: filteredMessage,\n     },\n  },\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -2656,
+        320
+      ],
+      "id": "43526e94-4c21-4158-8e11-5725494c78fc",
+      "name": "Latest Message"
+    },
+    {
+      "parameters": {
+        "operation": "reply",
+        "messageId": "={{ $('Loop Over Items').item.json.threadId }}",
+        "message": "={{ $node[\"Parse AI JSON\"].json.reply_html }}",
+        "options": {
+          "bccList": "arun@xyz.com"
+        }
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        -1584,
+        672
+      ],
+      "id": "53e52d95-ac74-4548-b8d5-f3f7a08f9604",
+      "name": "Ask Missing & Confirm1",
+      "webhookId": "558b4546-5aef-464d-aac8-c4b455b44b9a"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "c50f48ee-e44b-43c9-aa17-e28879eb962e",
+              "leftValue": "={{$node[\"Parse AI JSON\"].json.shipping_confirmed === true || $node[\"Parse AI JSON\"].json._id !== undefined}}",
+              "rightValue": "fal",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            },
+            {
+              "id": "9b252617-126c-4083-bf47-772bd19094f0",
+              "leftValue": "={{$node[\"Parse AI JSON\"].json.billing_confirmed === true \n\n $node[\"Parse AI JSON\"].json._id !== undefined}}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            },
+            {
+              "id": "348d49eb-3961-4abb-adf2-7996731b8200",
+              "leftValue": "={{$json.customize === true || $node[\"Parse AI JSON\"].json._id !== undefined}}",
+              "rightValue": "is",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        -1584,
+        304
+      ],
+      "id": "2f0fb28f-1e2c-4850-a5bf-db26abd9521c",
+      "name": "address + customize ?"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "if confirm ?1": {
+      "main": [
+        [
+          {
+            "node": "address + customize ?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Ask Missing & Confirm1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Match Product Data & store": {
+      "main": [
+        [
+          {
+            "node": "Calculate totals",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "FTP1": {
+      "main": [
+        [
+          {
+            "node": "format products",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "format products": {
+      "main": [
+        [
+          {
+            "node": "Order confirm",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate urls": {
+      "main": [
+        [
+          {
+            "node": "Saperate urls",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Saperate urls": {
+      "main": [
+        [
+          {
+            "node": "Get products",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calculate totals": {
+      "main": [
+        [
+          {
+            "node": "Format address details",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format address details": {
+      "main": [
+        [
+          {
+            "node": "Set Fields",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Fields": {
+      "main": [
+        [
+          {
+            "node": "Convert to file",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Convert to file": {
+      "main": [
+        [
+          {
+            "node": "FTP1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get products": {
+      "main": [
+        [
+          {
+            "node": "Match Product Data & store",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gmail Trigger": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Message a model": {
+      "main": [
+        [
+          {
+            "node": "Parse AI JSON",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request": {
+      "main": [
+        [
+          {
+            "node": "Decode body",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse AI JSON": {
+      "main": [
+        [
+          {
+            "node": "Upsert row(s)1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Store Conversation": {
+      "main": [
+        [
+          {
+            "node": "Latest Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "FTP2": {
+      "main": [
+        [
+          {
+            "node": "generate img url",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "get file name",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Get row(s)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get row(s)": {
+      "main": [
+        [
+          {
+            "node": "merge urls",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upsert row(s)": {
+      "main": [
+        [
+          {
+            "node": "parse urls",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "parse urls": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "store urls in arr": {
+      "main": [
+        [
+          {
+            "node": "Get row(s)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "convert in binary": {
+      "main": [
+        [
+          {
+            "node": "FTP2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "get file name": {
+      "main": [
+        [
+          {
+            "node": "convert in binary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "merge urls": {
+      "main": [
+        [
+          {
+            "node": "Upsert row(s)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "generate img url": {
+      "main": [
+        [
+          {
+            "node": "store urls in arr",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Decode body": {
+      "main": [
+        [
+          {
+            "node": "Store Conversation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get row(s)1": {
+      "main": [
+        [
+          {
+            "node": "Parse Order State",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Order State": {
+      "main": [
+        [
+          {
+            "node": "Message a model",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upsert row(s)1": {
+      "main": [
+        [
+          {
+            "node": "if confirm ?1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Over Items": {
+      "main": [
+        [],
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Latest Message": {
+      "main": [
+        [
+          {
+            "node": "Get row(s)1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ask Missing & Confirm1": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "address + customize ?": {
+      "main": [
+        [
+          {
+            "node": "Generate urls",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Ask Missing & confirm",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ask Missing & confirm": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Order confirm": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "0e47b132-353b-441b-8f8f-f2eb9450728c",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "4ee3c939f3950d1b3344d23002bad972e75019522e486126125d46e9c663bb76"
+  },
+  "id": "uh6d33JSk9BYSu4M",
+  "tags": []
+}
