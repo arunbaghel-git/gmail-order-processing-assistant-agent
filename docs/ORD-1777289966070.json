@@ -8,7 +8,7 @@
         "paid_date": null,
         "customer_ip_address": "",
         "customer_user": null,
-        "user_email": "a80109763@gmail.com",
+        "user_email": "a8010963@gmail.com",
         "transaction_id": "",
         "customer_note": "",
         "billing_first_name": "arun",
@@ -19,7 +19,7 @@
         "billing_state": "UP",
         "billing_postcode": "100101",
         "billing_country": "India",
-        "billing_email": "a80109763@gmail.com",
+        "billing_email": "a8010963@gmail.com",
         "billing_phone": "989898989",
         "shipping_first_name": "arun",
         "shipping_last_name": "",
@@ -42,11 +42,11 @@
             {
                 "sku": "EWW100U",
                 "line_id": 10806,
-                "product_name": "Essential Workwear Unisex T-Shirt",
+                "product_name": "xyz Workwear Unisex T-Shirt",
                 "qty": 5,
                 "item_price": 40.45,
                 "original_unit_price": 8.09,
-                "order_item_metadata": "Color: Navy | X-Large: 5 | Customization Type: Embroidery | Logo Type: New | Logo Location: Left Breast | Logo Text: Company Logo | Logo Image: html.justgoweb.com/attachements/logo.png"
+                "order_item_metadata": "Color: Navy | X-Large: 5 | Customization Type: Embroidery | Logo Type: New | Logo Location: Left Breast | Logo Text: Company Logo | Logo Image: html.xyz.com/attachements/logo.png"
             },
             {
                 "sku": "EWW200N",
